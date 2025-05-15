@@ -41,5 +41,9 @@ def read_root():
 if __name__ == "__main__":
     import uvicorn
     import os
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Tomar puerto y host de variables de entorno o usar valores predeterminados
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    # Iniciar servidor escuchando en todas las interfaces
+    print(f"Starting server at {host}:{port}")
+    uvicorn.run("app.main:app", host=host, port=port, log_level="info")
