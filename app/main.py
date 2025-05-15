@@ -33,11 +33,13 @@ app.include_router(proyecto.router, prefix="/api")  # Registrar las rutas de pro
 def read_root():
     return {
         "message": "Bienvenido a la API",
-        "docs": "http://localhost:8000/docs",
-        "openapi": "http://localhost:8000/openapi.json"
+        "docs": "/docs",
+        "openapi": "/openapi.json"
     }
 
 # Solo para ejecución directa (opcional)
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
