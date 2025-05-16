@@ -45,8 +45,6 @@
 #     uvicorn.run(app, host="0.0.0.0", port=port)
 
 
-
-
 import os
 import uvicorn
 from fastapi import FastAPI
@@ -81,7 +79,8 @@ def read_root():
         "openapi": "http://localhost:8000/openapi.json"
     }
 
-# Escuchar en el puerto proporcionado por la variable de entorno 'PORT'
+# Escuchar en el puerto proporcionado por la variable de entorno 'PORT' y en 0.0.0.0
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))  # Usa el puerto desde la variable de entorno, o 8000 por defecto
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)  # Escucha en 0.0.0.0 para que sea accesible
+
