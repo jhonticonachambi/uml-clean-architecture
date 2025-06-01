@@ -12,3 +12,6 @@ class DiagramRepository(ABC):
 
     @abstractmethod
     def list_by_project(self, project_id: str) -> List[Diagrama]: ...
+
+    @abstractmethod
+    def update(self, diagram: Diagrama) -> None: ...

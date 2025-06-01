@@ -91,6 +91,52 @@ class DiagramRepositoryImpl(DiagramRepository):
         # Mapear los resultados a entidades de dominio
         return [self._map_to_entity(db_diagram) for db_diagram in db_diagrams]
         
+    async def update(self, diagram: Diagrama) -> DiagramModel:
+        # Convertir diagram_id a entero si es una cadena
+        try:
+            diagram_id = int(diagram.id)
+        except (ValueError, TypeError):
+            raise ValueError("El ID del diagrama debe ser un entero válido")
+
+        # Buscar el diagrama existente
+        result = await self.db.execute(select(DiagramModel).filter_by(id=diagram_id))
+        db_diagram = result.scalar_one_or_none()
+        
+        if not db_diagram:
+            raise ValueError(f"Diagrama con ID {diagram_id} no encontrado")
+
+        # Convertir strings a UUID para proyecto_id y creado_por si es necesario
+        try:
+            proyecto_id = uuid.UUID(diagram.proyecto_id) if isinstance(diagram.proyecto_id, str) else diagram.proyecto_id
+        except ValueError:
+            proyecto_id = db_diagram.proyecto_id  # Mantener el valor existente
+            
+        try:
+            creado_por = uuid.UUID(diagram.creado_por) if isinstance(diagram.creado_por, str) else diagram.creado_por
+        except ValueError:
+            creado_por = db_diagram.creado_por  # Mantener el valor existente
+
+        # Actualizar los campos del diagrama
+        db_diagram.nombre = diagram.nombre
+        db_diagram.proyecto_id = proyecto_id
+        db_diagram.creado_por = creado_por
+        db_diagram.tipo_diagrama = diagram.tipo_diagrama.value
+        db_diagram.estado = diagram.estado
+        db_diagram.contenido_plantuml = diagram.contenido_plantuml
+        db_diagram.contenido_original = diagram.contenido_original
+        db_diagram.lenguaje_original = diagram.lenguaje_original
+        db_diagram.errores = diagram.errores
+        db_diagram.fecha_actualizacion = diagram.fecha_actualizacion
+
+        # Guardar los cambios en la base de datos
+        await self.db.commit()
+        await self.db.refresh(db_diagram)
+
+        # Actualizar el objeto de dominio con cualquier cambio de la base de datos
+        diagram.fecha_actualizacion = db_diagram.fecha_actualizacion
+
+        return db_diagram
+
     def _map_to_entity(self, db_diagram: DiagramModel) -> Diagrama:
         # Mapear desde el modelo de base de datos a la entidad de dominio
         from app.domain.entities.diagram import TipoDiagrama

@@ -53,10 +53,11 @@
 
 # app/api/routes/diagram.py
 from fastapi import APIRouter, HTTPException, Body, Depends
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from app.application.use_cases.diagram.generate_diagram import GenerarDiagramaDesdeCodigoUseCase
 from app.application.use_cases.diagram.create_diagram import CrearDiagramaUseCase
+from app.application.use_cases.diagram.edit_diagram import EditarDiagramaUseCase
 from app.domain.entities.diagram import Diagrama, TipoDiagrama
 from app.domain.repositories.diagram_repository import DiagramRepository
 from app.infrastructure.dependencies import get_diagram_repository
@@ -78,6 +79,15 @@ class CrearDiagramaRequest(BaseModel):
     lenguaje_original: str
     contenido_plantuml: str 
     errores: List[str] = None
+
+class EditarDiagramaRequest(BaseModel):
+    nombre: Optional[str] = None
+    tipo_diagrama: Optional[str] = None
+    contenido_original: Optional[str] = None
+    lenguaje_original: Optional[str] = None
+    contenido_plantuml: Optional[str] = None
+    errores: Optional[List[str]] = None
+    estado: Optional[str] = None
 
 @router.post("/generar", summary="Genera diagramas UML desde código fuente")
 async def generar_diagrama(
@@ -193,3 +203,43 @@ async def obtener_diagrama_por_id(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener el diagrama: {str(e)}")
+
+async def get_editar_diagrama_use_case(
+    diagram_repository: DiagramRepository = Depends(get_diagram_repository)
+) -> EditarDiagramaUseCase:
+    return EditarDiagramaUseCase(diagram_repository)
+
+@router.put("/{diagrama_id}", summary="Edita un diagrama existente")
+async def editar_diagrama(
+    diagrama_id: str,
+    request: EditarDiagramaRequest = Body(...),
+    editar_diagrama_use_case: EditarDiagramaUseCase = Depends(get_editar_diagrama_use_case),
+):
+    """Endpoint para editar un diagrama específico por su ID."""
+    try:
+        diagrama = await editar_diagrama_use_case.ejecutar(
+            diagrama_id=diagrama_id,
+            nombre=request.nombre,
+            tipo_diagrama=request.tipo_diagrama,
+            contenido_original=request.contenido_original,
+            lenguaje_original=request.lenguaje_original,
+            contenido_plantuml=request.contenido_plantuml,
+            errores=request.errores,
+            estado=request.estado
+        )
+        return {
+            "id": str(diagrama.id),
+            "nombre": diagrama.nombre,
+            "tipo_diagrama": diagrama.tipo_diagrama.value,
+            "contenido_plantuml": diagrama.contenido_plantuml,
+            "contenido_original": diagrama.contenido_original,
+            "lenguaje_original": diagrama.lenguaje_original,
+            "estado": diagrama.estado,
+            "errores": diagrama.errores,
+            "fecha_creacion": diagrama.fecha_creacion,
+            "fecha_actualizacion": diagrama.fecha_actualizacion
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al editar el diagrama: {str(e)}")
