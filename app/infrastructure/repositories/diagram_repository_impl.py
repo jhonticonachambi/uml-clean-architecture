@@ -114,9 +114,7 @@ class DiagramRepositoryImpl(DiagramRepository):
         try:
             creado_por = uuid.UUID(diagram.creado_por) if isinstance(diagram.creado_por, str) else diagram.creado_por
         except ValueError:
-            creado_por = db_diagram.creado_por  # Mantener el valor existente
-
-        # Actualizar los campos del diagrama
+            creado_por = db_diagram.creado_por  # Mantener el valor existente        # Actualizar los campos del diagrama
         db_diagram.nombre = diagram.nombre
         db_diagram.proyecto_id = proyecto_id
         db_diagram.creado_por = creado_por
@@ -127,12 +125,16 @@ class DiagramRepositoryImpl(DiagramRepository):
         db_diagram.lenguaje_original = diagram.lenguaje_original
         db_diagram.errores = diagram.errores
         db_diagram.fecha_actualizacion = diagram.fecha_actualizacion
+        
+        # Actualizar campos de versionado
+        if hasattr(db_diagram, 'version_actual'):
+            db_diagram.version_actual = diagram.version_actual
+        if hasattr(db_diagram, 'total_versiones'):
+            db_diagram.total_versiones = diagram.total_versiones
 
         # Guardar los cambios en la base de datos
         await self.db.commit()
-        await self.db.refresh(db_diagram)
-
-        # Actualizar el objeto de dominio con cualquier cambio de la base de datos
+        await self.db.refresh(db_diagram)        # Actualizar el objeto de dominio con cualquier cambio de la base de datos
         diagram.fecha_actualizacion = db_diagram.fecha_actualizacion
 
         return db_diagram
@@ -153,5 +155,6 @@ class DiagramRepositoryImpl(DiagramRepository):
             lenguaje_original=db_diagram.lenguaje_original,
             errores=db_diagram.errores,
             fecha_creacion=db_diagram.fecha_creacion,
-            fecha_actualizacion=db_diagram.fecha_actualizacion
+            fecha_actualizacion=db_diagram.fecha_actualizacion,            version_actual=getattr(db_diagram, 'version_actual', 1),
+            total_versiones=getattr(db_diagram, 'total_versiones', 1)
         )

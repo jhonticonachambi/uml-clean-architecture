@@ -15,6 +15,8 @@ from app.domain.repositories.project_repository import ProjectRepository
 from app.application.services.project_service import ProjectService
 from app.infrastructure.repositories.diagram_repository_impl import DiagramRepositoryImpl
 from app.domain.repositories.diagram_repository import DiagramRepository
+from app.infrastructure.repositories.version_diagrama_repository_impl import VersionDiagramaRepositoryImpl
+from app.domain.repositories.version_diagrama_repository import VersionDiagramaRepository
 
 # ✅ Inyección de sesión async
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -51,6 +53,12 @@ async def get_diagram_repository(
     db: AsyncSession = Depends(get_db)
 ) -> DiagramRepository:
     return DiagramRepositoryImpl(db)
+
+async def get_version_diagrama_repository(
+    db: AsyncSession = Depends(get_db)
+) -> VersionDiagramaRepository:
+    """Retorna una instancia del repositorio de versiones de diagramas."""
+    return VersionDiagramaRepositoryImpl(db)
 
 async def get_project_service(
     db: AsyncSession = Depends(get_db),

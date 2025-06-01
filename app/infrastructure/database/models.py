@@ -1,6 +1,6 @@
 # # # app/infrastructure/database/models.py
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, Integer, ARRAY
+from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, Integer, ARRAY, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
@@ -65,11 +65,34 @@ class DiagramModel(Base):
     estado = Column(String(50), default="borrador")
     contenido_plantuml = Column(Text, nullable=True)
     contenido_original = Column(Text, nullable=True)
-    lenguaje_original = Column(String(50), nullable=True)
+    lenguaje_original = Column(String(50), nullable=True)    
     errores = Column(ARRAY(String), default=[])
     fecha_creacion = Column(DateTime, server_default=func.now())
     fecha_actualizacion = Column(DateTime, onupdate=func.now())
     
-    # Relaciones
+    # Campos de versionado
+    version_actual = Column(Integer, default=1, nullable=False)
+    total_versiones = Column(Integer, default=1, nullable=False)
+      # Relaciones
     proyecto = relationship("ProyectoModel", back_populates="diagramas")
     creador = relationship("UserModel", back_populates="diagramas")
+    versiones = relationship("VersionDiagramaModel", back_populates="diagrama", cascade="all, delete-orphan")
+
+class VersionDiagramaModel(Base):
+    __tablename__ = "versiones_diagramas"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    diagrama_id = Column(Integer, ForeignKey("diagramas.id"), nullable=False)
+    numero_version = Column(Integer, nullable=False)
+    contenido_original = Column(Text, nullable=False)
+    notas_version = Column(Text, nullable=True)
+    creado_por = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    fecha_creacion = Column(DateTime, server_default=func.now())
+    
+    # Relaciones
+    diagrama = relationship("DiagramModel", back_populates="versiones")
+    creador = relationship("UserModel")
+      # Constraint de unicidad para diagrama_id + numero_version
+    __table_args__ = (
+        UniqueConstraint('diagrama_id', 'numero_version', name='uq_diagrama_version'),
+    )
