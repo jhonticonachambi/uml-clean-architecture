@@ -1,7 +1,7 @@
 # app/domain/repositories/project_repository.py
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from app.domain.entities.proyecto import Proyecto
+from app.domain.entities.project import Proyecto
 
 class ProjectRepository(ABC):
     @abstractmethod
@@ -15,3 +15,6 @@ class ProjectRepository(ABC):
     
     @abstractmethod
     def list_all(self) -> List[Proyecto]: ...
+
+    @abstractmethod
+    def update(self, project: Proyecto) -> None: ...

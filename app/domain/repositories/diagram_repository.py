@@ -1,7 +1,7 @@
 # app/domain/repositories/diagram_repository.py
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from app.domain.entities.diagrama import Diagrama
+from app.domain.entities.diagram import Diagrama
 
 class DiagramRepository(ABC):
     @abstractmethod

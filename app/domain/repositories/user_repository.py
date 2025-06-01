@@ -1,26 +1,25 @@
 # app/domain/repositories/user_repository.py
-
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
-from app.domain.entities.usuario import Usuario  
+from app.domain.entities.user import User  
 
 class UserRepository:
     """Interfaz abstracta para el repositorio de usuarios."""
 
-    def create(self, usuario: Usuario) -> Usuario:
+    def create(self, usuario: User) -> User:
         """Guarda un nuevo usuario en la base de datos."""
         raise NotImplementedError()
 
-    def get_by_id(self, user_id: str) -> Optional[Usuario]:
+    def get_by_id(self, user_id: str) -> Optional[User]:
         """Obtiene un usuario por su ID. Retorna None si no existe."""
         raise NotImplementedError()
 
-    def get_by_email(self, email: str) -> Optional[Usuario]:
+    def get_by_email(self, email: str) -> Optional[User]:
         """Busca un usuario por email. Retorna None si no existe."""
         raise NotImplementedError()
 
-    def update(self, usuario: Usuario) -> Usuario:
+    def update(self, usuario: User) -> User:
         """Actualiza los datos de un usuario existente."""
         raise NotImplementedError()
 
@@ -28,7 +27,7 @@ class UserRepository:
         """Elimina un usuario. Retorna True si tuvo éxito."""
         raise NotImplementedError()
 
-    def list_all(self, skip: int = 0, limit: int = 100) -> List[Usuario]:
+    def list_all(self, skip: int = 0, limit: int = 100) -> List[User]:
         """Lista usuarios con paginación."""
         raise NotImplementedError()
 

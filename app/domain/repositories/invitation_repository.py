@@ -1,7 +1,7 @@
 # app/domain/repositories/invitation_repository.py
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from app.domain.entities.colaboracion import InvitacionProyecto
+from app.domain.entities.collaboration import InvitacionProyecto
 
 class InvitationRepository(ABC):
     @abstractmethod

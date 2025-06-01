@@ -1,11 +1,15 @@
 from app.domain.repositories.project_repository import ProjectRepository
-from app.domain.entities.proyecto import Proyecto
+from app.domain.entities.project import Proyecto, MiembroProyecto
 from typing import Optional, List
 from sqlalchemy.future import select
-from app.infrastructure.database.models import ProyectoModel
+from app.infrastructure.database.models import ProyectoModel, MiembroProyectoModel
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+from app.domain.entities.base import RolProyecto
+from sqlalchemy import text
 import logging
+import uuid
 
 class ProjectRepositoryImpl(ProjectRepository):
     def __init__(self, db):
@@ -23,7 +27,6 @@ class ProjectRepositoryImpl(ProjectRepository):
         """Guarda un proyecto en la base de datos."""
         try:
             # Convertir los UUID de cadenas a objetos UUID
-            import uuid
             proyecto_id = uuid.UUID(project.id) if isinstance(project.id, str) else project.id
             user_id = uuid.UUID(project.user_id) if isinstance(project.user_id, str) else project.user_id
             uuid_publico = uuid.UUID(project.uuid_publico) if isinstance(project.uuid_publico, str) else project.uuid_publico
@@ -50,30 +53,50 @@ class ProjectRepositoryImpl(ProjectRepository):
 
     async def get_by_id(self, project_id: str) -> Optional[Proyecto]:
         """Obtiene un proyecto por su ID."""
-        query = await self.db.execute(select(ProyectoModel).filter_by(id=project_id))
-        proyecto_model = query.scalar_one_or_none()
-        if not proyecto_model:
+        try:
+            logging.info(f"[DEBUG] Ejecutando consulta para obtener proyecto con ID: {project_id}")
+            query = text("SELECT * FROM proyectos WHERE id = :project_id")
+            result = await self.db.execute(query, {"project_id": project_id})
+            proyecto_model = result.fetchone()
+
+            if not proyecto_model:
+                logging.warning(f"[WARN] Proyecto con ID {project_id} no encontrado")
+                return None
+
+            logging.info(f"[DEBUG] Proyecto encontrado: {proyecto_model}")
+            return Proyecto(
+                id=str(proyecto_model.id),
+                nombre=proyecto_model.nombre,
+                user_id=str(proyecto_model.user_id),
+                fecha_creacion=proyecto_model.fecha_creacion,
+                fecha_actualizacion=proyecto_model.fecha_actualizacion,
+                uuid_publico=str(proyecto_model.uuid_publico)
+            )
+        except Exception as e:
+            logging.error(f"[ERROR] Error al obtener proyecto por ID: {str(e)}")
             return None
-        return Proyecto(
-            id=proyecto_model.id,
-            nombre=proyecto_model.nombre,
-            user_id=proyecto_model.user_id,
-            fecha_creacion=proyecto_model.fecha_creacion,
-            fecha_actualizacion=proyecto_model.fecha_actualizacion
-        )    
+
     async def list_by_user(self, user_id: str) -> List[Proyecto]:
         """Obtiene todos los proyectos de un usuario específico."""
         try:
-            query = await self.db.execute(select(ProyectoModel).filter_by(user_id=user_id))
+            # Convertir el ID a un objeto UUID
+            user_uuid = uuid.UUID(user_id)
+            
+            query = await self.db.execute(
+                select(ProyectoModel).filter(ProyectoModel.user_id == user_uuid)
+            )
             proyecto_models = query.scalars().all()
             return [Proyecto(
-                id=modelo.id,
+                id=str(modelo.id),
                 nombre=modelo.nombre,
-                user_id=modelo.user_id,
+                user_id=str(modelo.user_id),
                 fecha_creacion=modelo.fecha_creacion,
                 fecha_actualizacion=modelo.fecha_actualizacion,
-                uuid_publico=modelo.uuid_publico
+                uuid_publico=str(modelo.uuid_publico)
             ) for modelo in proyecto_models]
+        except ValueError:
+            # Si el user_id no es un UUID válido
+            return []
         except SQLAlchemyError as e:
             logging.error(f"Error al listar proyectos por usuario: {str(e)}")
             raise ValueError(f"Error al listar proyectos: {str(e)}")
@@ -84,13 +107,130 @@ class ProjectRepositoryImpl(ProjectRepository):
             query = await self.db.execute(select(ProyectoModel))
             proyecto_models = query.scalars().all()
             return [Proyecto(
-                id=modelo.id,
+                id=str(modelo.id),
                 nombre=modelo.nombre,
-                user_id=modelo.user_id,
+                user_id=str(modelo.user_id),
                 fecha_creacion=modelo.fecha_creacion,
                 fecha_actualizacion=modelo.fecha_actualizacion,
-                uuid_publico=modelo.uuid_publico
+                uuid_publico=str(modelo.uuid_publico)
             ) for modelo in proyecto_models]
         except SQLAlchemyError as e:
             logging.error(f"Error al listar todos los proyectos: {str(e)}")
             raise ValueError(f"Error al listar todos los proyectos: {str(e)}")
+        
+    async def update(self, project: Proyecto) -> None:
+        """Actualiza un proyecto existente."""
+        try:
+            # Convertir los UUID de cadenas a objetos UUID
+            proyecto_id = uuid.UUID(project.id) if isinstance(project.id, str) else project.id
+            user_id = uuid.UUID(project.user_id) if isinstance(project.user_id, str) else project.user_id
+            uuid_publico = uuid.UUID(project.uuid_publico) if isinstance(project.uuid_publico, str) else project.uuid_publico
+            
+            proyecto_model = await self.db.get(ProyectoModel, proyecto_id)
+            if not proyecto_model:
+                raise ValueError(f"El proyecto con ID {project.id} no existe")
+            
+            # Actualizar los campos del modelo
+            proyecto_model.nombre = project.nombre
+            proyecto_model.user_id = user_id
+            proyecto_model.fecha_creacion = project.fecha_creacion
+            proyecto_model.fecha_actualizacion = project.fecha_actualizacion
+            proyecto_model.uuid_publico = uuid_publico
+            
+            await self.db.commit()
+            await self.db.refresh(proyecto_model)
+        except IntegrityError as e:
+            logging.error(f"Error de integridad al actualizar el proyecto: {str(e)}")
+            await self.db.rollback()
+            raise ValueError(f"Error de integridad: {str(e)}")
+        except SQLAlchemyError as e:
+            logging.error(f"Error al actualizar el proyecto: {str(e)}")
+            await self.db.rollback()
+            raise ValueError(f"Error al actualizar el proyecto: {str(e)}")
+        
+    async def add_member(self, project_id: str, member: MiembroProyecto) -> None:
+        """
+        Agrega un miembro a un proyecto existente.
+        
+        Args:
+            project_id: ID del proyecto
+            member: Objeto MiembroProyecto con los datos del miembro
+        
+        Raises:
+            ValueError: Si el proyecto no existe o si hay un error al añadir el miembro
+        """
+        try:
+            # Verificar que el proyecto existe usando SQL nativo
+            query = text("SELECT * FROM proyectos WHERE id = :project_id")
+            result = await self.db.execute(query, {"project_id": project_id})
+            proyecto_model = result.fetchone()
+            
+            if not proyecto_model:
+                raise ValueError(f"El proyecto con ID {project_id} no existe")
+            
+            # Verificar si el miembro ya existe usando SQL nativo
+            query = text("""
+                SELECT * FROM miembros_proyecto 
+                WHERE proyecto_id = :project_id AND usuario_id = :user_id
+            """)
+            result = await self.db.execute(query, {
+                "project_id": project_id, 
+                "user_id": member.usuario_id
+            })
+            existing_member = result.fetchone()
+            
+            if existing_member:
+                # Si el miembro ya existe, actualizamos su rol
+                update_query = text("""
+                    UPDATE miembros_proyecto 
+                    SET rol = :rol 
+                    WHERE proyecto_id = :project_id AND usuario_id = :user_id
+                """)
+                await self.db.execute(update_query, {
+                    "rol": member.rol.value,
+                    "project_id": project_id,
+                    "user_id": member.usuario_id
+                })
+            else:
+                # Si no existe, creamos un nuevo miembro usando SQL nativo
+                insert_query = text("""
+                    INSERT INTO miembros_proyecto (usuario_id, proyecto_id, rol, fecha_union)
+                    VALUES (:user_id, :project_id, :rol, :fecha_union)
+                """)
+                await self.db.execute(insert_query, {
+                    "user_id": member.usuario_id,
+                    "project_id": project_id,
+                    "rol": member.rol.value,
+                    "fecha_union": member.fecha_union
+                })
+            
+            # Actualizamos la fecha de actualización del proyecto
+            update_proyecto_query = text("""
+                UPDATE proyectos 
+                SET fecha_actualizacion = :fecha 
+                WHERE id = :project_id
+            """)
+            await self.db.execute(update_proyecto_query, {
+                "fecha": datetime.now(),
+                "project_id": project_id
+            })
+            
+            # Guardamos los cambios
+            await self.db.commit()
+            
+        except ValueError as e:
+            logging.error(f"Error de valor al añadir miembro: {str(e)}")
+            await self.db.rollback()
+            raise ValueError(f"Error de valor: {str(e)}")
+        except IntegrityError as e:
+            logging.error(f"Error de integridad al añadir miembro: {str(e)}")
+            await self.db.rollback()
+            raise ValueError(f"Error de integridad: {str(e)}")
+        except SQLAlchemyError as e:
+            logging.error(f"Error al añadir miembro al proyecto: {str(e)}")
+            await self.db.rollback()
+            raise ValueError(f"Error al añadir miembro: {str(e)}")
+        except Exception as e:
+            logging.error(f"Error inesperado: {str(e)}")
+            await self.db.rollback()
+            raise ValueError(f"Error inesperado: {str(e)}")

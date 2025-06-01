@@ -1,5 +1,5 @@
-from app.domain.entities.proyecto import Proyecto, MiembroProyecto
-from app.domain.entities.diagrama import Diagrama
+from app.domain.entities.project import Proyecto, MiembroProyecto
+from app.domain.entities.diagram import Diagrama
 from app.domain.repositories.project_repository import ProjectRepository
 from app.domain.repositories.user_repository import UserRepository
 from app.domain.repositories.diagram_repository import DiagramRepository
@@ -7,7 +7,7 @@ from app.domain.entities.base import RolProyecto
 from typing import List, Optional
 
 class ProjectService:
-    def __init__(self, project_repo: ProjectRepository, user_repo: UserRepository, diagram_repo: DiagramRepository):
+    def __init__(self, project_repo: ProjectRepository, user_repo: UserRepository, diagram_repo: DiagramRepository = None):
         self.project_repo = project_repo
         self.user_repo = user_repo
         self.diagram_repo = diagram_repo
@@ -64,11 +64,11 @@ class ProjectService:
             raise ValueError("El diagrama no existe")
 
         proyecto.eliminar_diagrama(diagrama)
-        self.project_repo.guardar_proyecto(proyecto)   
+        self.project_repo.guardar_proyecto(proyecto)
          
     async def obtener_proyecto_por_id(self, proyecto_id: str) -> Proyecto:
         """Obtiene un proyecto por su ID."""
-        proyecto = self.project_repo.obtener_proyecto_por_id(proyecto_id)
+        proyecto = await self.project_repo.get_by_id(proyecto_id)
         if not proyecto:
             raise ValueError("El proyecto no existe")
         return proyecto

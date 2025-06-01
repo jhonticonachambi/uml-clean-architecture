@@ -1,19 +1,44 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.application.services.project_service import ProjectService
-from app.use_cases.proyecto.crear_proyecto import CrearProyectoUseCase
-from app.use_cases.proyecto.agregar_miembro import AgregarMiembroUseCase
-from app.use_cases.proyecto.vincular_diagrama import VincularDiagramaUseCase
-from app.use_cases.proyecto.desvincular_diagrama import DesvincularDiagramaUseCase
-from app.use_cases.proyecto.obtener_proyectos import ObtenerProyectosUseCase
+from app.application.use_cases.project.crear_proyecto import CrearProyectoUseCase
+from app.application.use_cases.project.obtener_proyectos import ObtenerProyectosUseCase
+from app.application.use_cases.project.obtener_proyecto_por_id import ObtenerProyectoPorIdUseCase, ObtenerProyectoPorIdRequest
 from app.domain.entities.base import RolProyecto
-from app.infrastructure.dependencies import get_project_service
+from app.infrastructure.dependencies import get_project_service, get_user_repository
 from pydantic import BaseModel
+from app.application.use_cases.project.add_project_member import AgregarMiembroUseCase
+from app.domain.entities.base import RolProyecto
+from datetime import datetime
+from typing import List
+
 
 router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
 
 class CrearProyectoRequest(BaseModel):
     nombre: str
     user_id: str
+
+# Modelo Pydantic para la solicitud
+class AgregarMiembroRequest(BaseModel):
+    usuario_id: str
+    rol: str  # Debe ser uno de los valores definidos en RolProyecto
+
+# Modelo Pydantic para la respuesta
+class MiembroResponse(BaseModel):
+    usuario_id: str
+    proyecto_id: str
+    rol: str
+    fecha_union: datetime
+
+# Modelo Pydantic para la respuesta del proyecto completo
+class ProyectoResponse(BaseModel):
+    id: str
+    nombre: str
+    user_id: str
+    miembros: List[MiembroResponse] = []
+    fecha_creacion: datetime
+    fecha_actualizacion: datetime
+    uuid_publico: str
 
 @router.post("/crear")
 async def crear_proyecto(request: CrearProyectoRequest, project_service: ProjectService = Depends(get_project_service)):
@@ -31,33 +56,6 @@ async def crear_proyecto(request: CrearProyectoRequest, project_service: Project
         print(f"[ERROR] Error inesperado: {e}")  # Log de error inesperado
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
-@router.post("/{proyecto_id}/miembros/agregar")
-def agregar_miembro(proyecto_id: str, usuario_id: str, rol: RolProyecto, project_service: ProjectService = Depends(get_project_service)):
-    use_case = AgregarMiembroUseCase(project_service)
-    try:
-        miembro = use_case.ejecutar(proyecto_id, usuario_id, rol)
-        return {"mensaje": "Miembro agregado exitosamente", "miembro": miembro}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.post("/{proyecto_id}/diagramas/vincular")
-def vincular_diagrama(proyecto_id: str, diagrama_id: str, project_service: ProjectService = Depends(get_project_service)):
-    use_case = VincularDiagramaUseCase(project_service)
-    try:
-        use_case.ejecutar(proyecto_id, diagrama_id)
-        return {"mensaje": "Diagrama vinculado exitosamente"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.post("/{proyecto_id}/diagramas/desvincular")
-def desvincular_diagrama(proyecto_id: str, diagrama_id: str, project_service: ProjectService = Depends(get_project_service)):
-    use_case = DesvincularDiagramaUseCase(project_service)
-    try:
-        use_case.ejecutar(proyecto_id, diagrama_id)
-        return {"mensaje": "Diagrama desvinculado exitosamente"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
 @router.get("/", summary="Obtiene todos los proyectos")
 async def obtener_proyectos(project_service: ProjectService = Depends(get_project_service)):
     """
@@ -70,7 +68,109 @@ async def obtener_proyectos(project_service: ProjectService = Depends(get_projec
     except Exception as e:
         print(f"[ERROR] Error al obtener proyectos: {e}")  # Log de error inesperado
         raise HTTPException(status_code=500, detail=f"Error al obtener proyectos: {str(e)}")
+    
+@router.post("/{proyecto_id}/miembros", summary="Agrega un miembro al proyecto")
+async def agregar_miembro(
+    proyecto_id: str, 
+    request: AgregarMiembroRequest, 
+    current_user_id: str = "usuario_actual",  # Aquí deberías usar tu sistema de autenticación
+    project_service: ProjectService = Depends(get_project_service),
+    user_repository = Depends(get_user_repository)  # Necesitas agregar esta dependencia
+):
+    """
+    Endpoint para agregar un miembro a un proyecto existente.
+    
+    - **proyecto_id**: ID del proyecto al que se agregará el miembro
+    - **usuario_id**: ID del usuario que será añadido como miembro
+    - **rol**: Rol que tendrá el usuario ('propietario', 'editor', 'visualizador')
+    
+    Retorna los datos del nuevo miembro agregado.
+    """
+    print(f"[INFO] Iniciando agregar miembro a proyecto {proyecto_id}")
+    
+    use_case = AgregarMiembroUseCase(project_service.project_repo, user_repository)
+    
+    try:
+        # Llamar al caso de uso
+        miembro = await use_case.execute(
+            proyecto_id=proyecto_id,
+            usuario_id=request.usuario_id,
+            rol=request.rol,
+            usuario_solicitante_id=current_user_id
+        )
+        
+        print(f"[INFO] Miembro agregado exitosamente: {miembro}")
+        
+        # Convertir la entidad a un modelo de respuesta
+        response = MiembroResponse(
+            usuario_id=miembro.usuario_id,
+            proyecto_id=miembro.proyecto_id,
+            rol=miembro.rol.value,
+            fecha_union=miembro.fecha_union
+        )
+        
+        return response
+        
+    except ValueError as e:
+        print(f"[ERROR] Error de validación: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        print(f"[ERROR] Error de permisos: {e}")
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        print(f"[ERROR] Error inesperado: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
 
-@router.get("/health", summary="Verifica el estado del servidor")
-async def health_check():
-    return {"status": "ok"}
+@router.get("/{proyecto_id}", summary="Obtiene los detalles de un proyecto por su ID")
+async def obtener_proyecto_por_id(
+    proyecto_id: str, 
+    project_service: ProjectService = Depends(get_project_service)
+):
+    """
+    Endpoint para obtener los detalles de un proyecto específico.
+    
+    - **proyecto_id**: ID del proyecto a obtener
+    
+    Retorna los detalles del proyecto solicitado.
+    """
+    print(f"[INFO] Obteniendo detalles del proyecto {proyecto_id}")
+    
+    use_case = ObtenerProyectoPorIdUseCase(project_service)
+    
+    try:
+        print(f"[DEBUG] Iniciando caso de uso ObtenerProyectoPorIdUseCase con ID: {proyecto_id}")
+        proyecto = await use_case.ejecutar(proyecto_id)
+        print(f"[DEBUG] Resultado del caso de uso: {proyecto}")
+
+        if not proyecto:
+            print(f"[WARN] Proyecto con ID {proyecto_id} no encontrado")
+            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+        print(f"[INFO] Proyecto obtenido exitosamente: {proyecto}")
+
+        response = ProyectoResponse(
+            id=proyecto.id,
+            nombre=proyecto.nombre,
+            user_id=proyecto.user_id,
+            miembros=[
+                MiembroResponse(
+                    usuario_id=miembro.usuario_id,
+                    proyecto_id=miembro.proyecto_id,
+                    rol=miembro.rol.value,
+                    fecha_union=miembro.fecha_union
+                ) for miembro in proyecto.miembros
+            ],
+            fecha_creacion=proyecto.fecha_creacion,
+            fecha_actualizacion=proyecto.fecha_actualizacion,
+            uuid_publico=proyecto.uuid_publico
+        )
+
+        print(f"[DEBUG] Respuesta generada: {response}")
+        return response
+
+    except ValueError as e:
+        print(f"[ERROR] Error de validación: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[ERROR] Error inesperado: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")

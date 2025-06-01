@@ -16,14 +16,14 @@ class EstadoDiagrama(str, Enum):
         return [cls.VALIDADO, cls.PERSISTIDO]
 
 class RolProyecto(str, Enum):
-    LECTOR = "lector"
-    COLABORADOR = "colaborador"
-    ADMINISTRADOR = "administrador"
     PROPIETARIO = "propietario"
+    EDITOR = "editor"
+    VISUALIZADOR = "visualizador"
     
     @classmethod
     def roles_edicion(cls):
-        return [cls.ADMINISTRADOR, cls.COLABORADOR, cls.PROPIETARIO]
+        """Devuelve los roles que pueden editar un proyecto"""
+        return [cls.PROPIETARIO, cls.EDITOR]
 
 @dataclass
 class Entidad:

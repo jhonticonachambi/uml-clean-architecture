@@ -18,11 +18,21 @@ SQLALCHEMY_DATABASE_URL = (
 engine = create_async_engine(
     SQLALCHEMY_DATABASE_URL,
     echo=True,
-    pool_size=10,
-    max_overflow=20,
-    pool_timeout=30,
-    pool_pre_ping=True,
-    connect_args={"ssl": "require"}
+    pool_size=5,         # Reducir el tamaño del pool
+    max_overflow=10,      # Reducir el overflow máximo
+    pool_timeout=60,     # Aumentar el tiempo de espera
+    pool_pre_ping=True,  
+    pool_recycle=1800,   # Reciclar conexiones cada 30 minutos
+    # ✅ Configuración para manejar cambios de schema
+    connect_args={
+        "ssl": "require", 
+        "timeout": 60.0, 
+        "command_timeout": 60.0,
+        "server_settings": {
+            "application_name": "uml-clean-architecture",
+            "jit": "off"  # ✅ Desactivar JIT para evitar problemas de caché
+        }
+    }
 )
 
 
