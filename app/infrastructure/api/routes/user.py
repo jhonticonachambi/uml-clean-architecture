@@ -1,5 +1,5 @@
 # infrastructure/api/routes/auth.py
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from pydantic import BaseModel
 from app.application.use_cases.user.create_user import RegistrarUsuarioUseCase, RegistrarUsuarioRequest
 from app.application.use_cases.user.get_current_user import GetCurrentUserUseCase, GetCurrentUserRequest
@@ -85,3 +85,42 @@ async def get_current_user(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/buscar", response_model=UserResponse, summary="Buscar usuario por email")
+async def buscar_usuario_por_email(
+    email: str = Query(..., description="Email del usuario a buscar"),
+    user_repo = Depends(get_user_repository)
+):
+    """
+    Busca un usuario por su email.
+    
+    - **email**: Email del usuario a buscar
+    
+    Útil para verificar si un usuario existe antes de invitarlo a un proyecto.
+    """
+    try:
+        usuario = await user_repo.get_by_email(email)
+        
+        if not usuario:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No se encontró usuario con email: {email}"
+            )
+        
+        if not usuario.activo:
+            raise HTTPException(
+                status_code=400,
+                detail="El usuario está inactivo"
+            )
+        
+        return UserResponse(
+            id=str(usuario.id),
+            email=usuario.email,
+            nombre=usuario.nombre,
+            activo=usuario.activo
+        )
+    except HTTPException:
+        # Re-raise HTTPExceptions to preserve status codes
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
