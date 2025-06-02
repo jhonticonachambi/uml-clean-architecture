@@ -5,6 +5,7 @@ from app.application.use_cases.project.obtener_proyectos import ObtenerProyectos
 from app.application.use_cases.project.obtener_proyecto_por_id import ObtenerProyectoPorIdUseCase, ObtenerProyectoPorIdRequest
 from app.application.use_cases.project.get_my_owned_projects import GetMyOwnedProjectsUseCase
 from app.application.use_cases.project.get_accessible_projects import GetAccessibleProjectsUseCase
+from app.application.use_cases.project.get_project_members import GetProjectMembersUseCase
 from app.domain.entities.base import RolProyecto
 from app.infrastructure.dependencies import get_project_service, get_user_repository, get_project_repository, get_member_repository, get_current_user
 from pydantic import BaseModel
@@ -222,3 +223,24 @@ async def obtener_proyecto_por_id(
     except Exception as e:
         print(f"[ERROR] Error inesperado: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@router.get("/{proyecto_id}/miembros", summary="Obtiene los miembros de un proyecto")
+async def get_project_members(
+    proyecto_id: str,
+    project_repository: ProjectRepository = Depends(get_project_repository)
+):
+    """
+    Endpoint para obtener todos los miembros de un proyecto específico.
+    
+    - **proyecto_id**: ID del proyecto del cual obtener los miembros
+    
+    Retorna la lista de miembros del proyecto con información del usuario y permisos.
+    """
+    try:
+        use_case = GetProjectMembersUseCase(project_repository)
+        result = await use_case.execute(proyecto_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")

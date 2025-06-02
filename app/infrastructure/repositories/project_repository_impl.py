@@ -329,4 +329,80 @@ class ProjectRepositoryImpl(ProjectRepository):
             
         except SQLAlchemyError as e:
             logging.error(f"Error al obtener proyectos accesibles: {str(e)}")
+            return []    
+        
+    async def get_project_members(self, proyecto_id: str) -> List[Dict]:
+        """
+        Obtiene todos los miembros de un proyecto específico con información del usuario.
+        Incluye tanto a los miembros de la tabla miembros_proyecto como al propietario.
+        """
+        try:
+            query = text("""
+                SELECT 
+                    usuario_id,
+                    proyecto_id,
+                    rol,
+                    fecha_union,
+                    usuario_nombre,
+                    usuario_email,
+                    usuario_activo
+                FROM (
+                    SELECT 
+                        mp.usuario_id,
+                        mp.proyecto_id,
+                        mp.rol,
+                        mp.fecha_union,
+                        u.nombre as usuario_nombre,
+                        u.email as usuario_email,
+                        u.activo as usuario_activo
+                    FROM miembros_proyecto mp
+                    INNER JOIN users u ON mp.usuario_id = u.id
+                    WHERE mp.proyecto_id = :proyecto_id
+                    
+                    UNION ALL
+                    
+                    SELECT 
+                        p.user_id as usuario_id,
+                        p.id as proyecto_id,
+                        'propietario' as rol,
+                        p.fecha_creacion as fecha_union,
+                        u.nombre as usuario_nombre,
+                        u.email as usuario_email,
+                        u.activo as usuario_activo
+                    FROM proyectos p
+                    INNER JOIN users u ON p.user_id = u.id
+                    WHERE p.id = :proyecto_id
+                ) as todos_miembros
+                ORDER BY 
+                    CASE WHEN rol = 'propietario' THEN 0 ELSE 1 END,
+                    fecha_union ASC
+            """)
+            
+            result = await self.db.execute(query, {"proyecto_id": proyecto_id})
+            miembros_data = result.fetchall()
+            
+            miembros_formateados = []
+            for miembro in miembros_data:
+                miembros_formateados.append({
+                    "usuario_id": str(miembro.usuario_id),
+                    "proyecto_id": str(miembro.proyecto_id),
+                    "rol": miembro.rol,
+                    "fecha_union": miembro.fecha_union,
+                    "usuario": {
+                        "id": str(miembro.usuario_id),
+                        "nombre": miembro.usuario_nombre,
+                        "email": miembro.usuario_email,
+                        "activo": miembro.usuario_activo
+                    },
+                    "permisos": {
+                        "puede_editar": miembro.rol in ["propietario", "editor"],
+                        "puede_administrar": miembro.rol == "propietario",
+                        "puede_ver": True
+                    }
+                })
+            
+            return miembros_formateados
+            
+        except SQLAlchemyError as e:
+            logging.error(f"Error al obtener miembros del proyecto: {str(e)}")
             return []

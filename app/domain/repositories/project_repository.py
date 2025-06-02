@@ -33,3 +33,16 @@ class ProjectRepository(ABC):
         - Como miembro (usuario_id en tabla miembros_proyecto)
         """
         pass
+
+    @abstractmethod
+    async def get_project_members(self, proyecto_id: str) -> List[Dict]:
+        """
+        Obtiene todos los miembros de un proyecto específico.
+        
+        Args:
+            proyecto_id: ID del proyecto
+            
+        Returns:
+            List[Dict]: Lista de miembros con información del usuario y rol
+        """
+        pass
