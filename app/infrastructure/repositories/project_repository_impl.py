@@ -1,6 +1,6 @@
 from app.domain.repositories.project_repository import ProjectRepository
 from app.domain.entities.project import Proyecto, MiembroProyecto
-from typing import Optional, List
+from typing import Optional, List, Dict
 from sqlalchemy.future import select
 from app.infrastructure.database.models import ProyectoModel, MiembroProyectoModel
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
@@ -234,3 +234,99 @@ class ProjectRepositoryImpl(ProjectRepository):
             logging.error(f"Error inesperado: {str(e)}")
             await self.db.rollback()
             raise ValueError(f"Error inesperado: {str(e)}")
+
+    async def get_projects_by_owner(self, owner_id: str) -> List[Proyecto]:
+        """Obtiene todos los proyectos donde el usuario es propietario."""
+        try:
+            # Validar que el owner_id es un UUID válido
+            logging.debug(f"[DEBUG] Valor recibido para owner_id: {owner_id}")
+            owner_uuid = uuid.UUID(owner_id)
+
+            logging.debug(f"[DEBUG] UUID convertido para owner_id: {owner_uuid}")
+            query = select(ProyectoModel).where(ProyectoModel.user_id == owner_uuid)
+            logging.debug(f"[DEBUG] Consulta generada: {query}")
+
+            result = await self.db.execute(query)
+            proyectos = result.scalars().all()
+
+            logging.debug(f"[DEBUG] Proyectos obtenidos: {proyectos}")
+            return [Proyecto.from_orm(proyecto) for proyecto in proyectos]
+        except ValueError:
+            logging.error(f"El owner_id proporcionado no es un UUID válido: {owner_id}")
+            raise ValueError("El ID del propietario no es válido.")
+        except SQLAlchemyError as e:
+            logging.error(f"Error al obtener proyectos por propietario: {str(e)}")
+            raise ValueError("Error al obtener proyectos por propietario.")
+
+    async def get_projects_by_membership(self, user_id: str) -> List[Proyecto]:
+        """Obtiene todos los proyectos donde el usuario es miembro."""
+        try:
+            query = text(
+                """
+                SELECT p.* FROM proyectos p
+                JOIN miembros_proyecto mp ON p.id = mp.proyecto_id
+                WHERE mp.usuario_id = :user_id                """
+            )
+            result = await self.db.execute(query, {"user_id": user_id})
+            proyectos = result.fetchall()
+            return [Proyecto.from_orm(proyecto) for proyecto in proyectos]
+        except SQLAlchemyError as e:
+            logging.error(f"Error al obtener proyectos por membresía: {str(e)}")
+            return []
+    
+    async def get_accessible_projects(self, user_id: str) -> List[Dict]:
+        """
+        Busca proyectos en DOS TABLAS:
+        1. proyectos donde user_id = usuario (es propietario)
+        2. miembros_proyecto donde usuario_id = usuario (es miembro)
+        """
+        try:
+            query = text("""
+                SELECT DISTINCT 
+                    p.id,
+                    p.nombre,
+                    p.fecha_creacion,
+                    p.fecha_actualizacion,
+                    p.uuid_publico,
+                    p.user_id as propietario_id,
+                    CASE 
+                        WHEN p.user_id = :user_id THEN 'propietario'
+                        ELSE COALESCE(mp.rol, 'miembro')
+                    END as mi_rol,
+                    CASE 
+                        WHEN p.user_id = :user_id THEN 'proyecto_propio'
+                        ELSE 'proyecto_compartido'
+                    END as tipo_acceso
+                FROM proyectos p
+                LEFT JOIN miembros_proyecto mp ON p.id = mp.proyecto_id AND mp.usuario_id = :user_id
+                WHERE 
+                    p.user_id = :user_id  -- Es propietario
+                    OR 
+                    mp.usuario_id = :user_id  -- Es miembro
+                ORDER BY p.fecha_actualizacion DESC
+            """)
+            
+            result = await self.db.execute(query, {"user_id": user_id})
+            proyectos = result.fetchall()
+            
+            # Formatear respuesta
+            proyectos_formateados = []
+            for proyecto in proyectos:
+                proyectos_formateados.append({
+                    "id": str(proyecto.id),
+                    "nombre": proyecto.nombre,
+                    "fecha_creacion": proyecto.fecha_creacion,
+                    "fecha_actualizacion": proyecto.fecha_actualizacion,
+                    "uuid_publico": str(proyecto.uuid_publico),
+                    "mi_rol": proyecto.mi_rol,
+                    "tipo_acceso": proyecto.tipo_acceso,
+                    "soy_propietario": str(proyecto.propietario_id) == user_id,
+                    "puedo_editar": proyecto.mi_rol in ["propietario", "editor"],
+                    "puedo_administrar": proyecto.mi_rol == "propietario"
+                })
+            
+            return proyectos_formateados
+            
+        except SQLAlchemyError as e:
+            logging.error(f"Error al obtener proyectos accesibles: {str(e)}")
+            return []

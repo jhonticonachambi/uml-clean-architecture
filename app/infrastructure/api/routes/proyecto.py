@@ -1,15 +1,22 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from app.application.services.project_service import ProjectService
 from app.application.use_cases.project.crear_proyecto import CrearProyectoUseCase
 from app.application.use_cases.project.obtener_proyectos import ObtenerProyectosUseCase
 from app.application.use_cases.project.obtener_proyecto_por_id import ObtenerProyectoPorIdUseCase, ObtenerProyectoPorIdRequest
+from app.application.use_cases.project.get_my_owned_projects import GetMyOwnedProjectsUseCase
+from app.application.use_cases.project.get_accessible_projects import GetAccessibleProjectsUseCase
 from app.domain.entities.base import RolProyecto
-from app.infrastructure.dependencies import get_project_service, get_user_repository
+from app.infrastructure.dependencies import get_project_service, get_user_repository, get_project_repository, get_member_repository, get_current_user
 from pydantic import BaseModel
 from app.application.use_cases.project.add_project_member import AgregarMiembroUseCase
 from app.domain.entities.base import RolProyecto
 from datetime import datetime
 from typing import List
+from app.domain.entities.user import User
+from app.domain.repositories.project_repository import ProjectRepository
+from app.domain.repositories.member_repository import MemberRepository
+from uuid import UUID
+import logging
 
 
 router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
@@ -68,6 +75,47 @@ async def obtener_proyectos(project_service: ProjectService = Depends(get_projec
     except Exception as e:
         print(f"[ERROR] Error al obtener proyectos: {e}")  # Log de error inesperado
         raise HTTPException(status_code=500, detail=f"Error al obtener proyectos: {str(e)}")
+
+@router.get("/my-owned", summary="Obtiene proyectos donde soy propietario")
+async def get_my_owned_projects(
+    user_id: str,
+    project_repository: ProjectRepository = Depends(get_project_repository)
+):
+    """
+    Endpoint para obtener los proyectos donde el usuario especificado es el propietario.
+    """
+    logging.debug(f"[DEBUG] Valor recibido para user_id en el endpoint: {user_id}")
+    try:
+        # Validar que el user_id es un UUID válido
+        user_uuid = UUID(user_id)
+        logging.debug(f"[DEBUG] UUID convertido para user_id en el endpoint: {user_uuid}")
+    except ValueError:
+        logging.error(f"[ERROR] El user_id proporcionado no es un UUID válido: {user_id}")
+        raise HTTPException(status_code=400, detail="El user_id proporcionado no es un UUID válido.")
+
+    use_case = GetMyOwnedProjectsUseCase(project_repository)
+    proyectos = await use_case.execute(str(user_uuid))
+    logging.debug(f"[DEBUG] Proyectos obtenidos en el endpoint: {proyectos}")
+    return {"proyectos": proyectos, "total": len(proyectos)}
+
+@router.get("/accessible", summary="Obtiene todos los proyectos donde tengo acceso")
+async def get_accessible_projects(
+    user_id: str = Query(..., description="ID del usuario"),
+    project_repository: ProjectRepository = Depends(get_project_repository)
+):
+    """
+    Endpoint para obtener todos los proyectos a los que el usuario tiene acceso:
+    - Como propietario (user_id en tabla proyectos)
+    - Como miembro (usuario_id en tabla miembros_proyecto)
+    """
+    try:
+        use_case = GetAccessibleProjectsUseCase(project_repository)
+        result = await use_case.execute(user_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
     
 @router.post("/{proyecto_id}/miembros", summary="Agrega un miembro al proyecto")
 async def agregar_miembro(

@@ -1,6 +1,6 @@
 # app/domain/repositories/project_repository.py
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict
 from app.domain.entities.project import Proyecto
 
 class ProjectRepository(ABC):
@@ -18,3 +18,18 @@ class ProjectRepository(ABC):
 
     @abstractmethod
     def update(self, project: Proyecto) -> None: ...
+
+    @abstractmethod
+    async def get_projects_by_owner(self, user_id: str) -> List[Proyecto]: ...
+    
+    @abstractmethod
+    async def get_projects_by_membership(self, user_id: str) -> List[Proyecto]: ...
+
+    @abstractmethod
+    async def get_accessible_projects(self, user_id: str) -> List[Dict]:
+        """
+        Obtiene todos los proyectos donde el usuario tiene acceso:
+        - Como propietario (user_id en tabla proyectos)
+        - Como miembro (usuario_id en tabla miembros_proyecto)
+        """
+        pass

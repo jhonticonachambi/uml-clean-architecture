@@ -1,6 +1,7 @@
 # app/infrastructure/dependencies.py
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import AsyncGenerator
 
@@ -17,6 +18,9 @@ from app.infrastructure.repositories.diagram_repository_impl import DiagramRepos
 from app.domain.repositories.diagram_repository import DiagramRepository
 from app.infrastructure.repositories.version_diagrama_repository_impl import VersionDiagramaRepositoryImpl
 from app.domain.repositories.version_diagrama_repository import VersionDiagramaRepository
+from app.domain.repositories.member_repository import MemberRepository
+from app.infrastructure.repositories.member_repository_impl import MemberRepositoryImpl
+from app.domain.entities.user import User
 
 # ✅ Inyección de sesión async
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -59,6 +63,39 @@ async def get_version_diagrama_repository(
 ) -> VersionDiagramaRepository:
     """Retorna una instancia del repositorio de versiones de diagramas."""
     return VersionDiagramaRepositoryImpl(db)
+
+async def get_project_repository(
+    db: AsyncSession = Depends(get_db)
+) -> ProjectRepositoryImpl:
+    return ProjectRepositoryImpl(db)
+
+async def get_member_repository(
+    db: AsyncSession = Depends(get_db)
+) -> MemberRepository:
+    return MemberRepositoryImpl(db)
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    user_repo: UserRepositoryImpl = Depends(get_user_repository)
+) -> User:
+    """
+    Obtiene el usuario actual desde el token JWT
+    """
+    auth_service = AuthServiceImpl()
+    user_id = auth_service.verify_token(credentials.credentials)
+    
+    if not user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Token inválido o expirado",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    user = await user_repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    return user
 
 async def get_project_service(
     db: AsyncSession = Depends(get_db),

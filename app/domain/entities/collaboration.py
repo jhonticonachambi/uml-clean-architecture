@@ -1,25 +1,21 @@
 # app/domain/entities/collaboration.py
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
-import uuid  # Importación necesaria añadida
-from .base import Entidad, RolProyecto
+from .base import RolProyecto
 
 @dataclass
-class InvitacionProyecto(Entidad):
+class ColaboracionProyecto:
     proyecto_id: str
-    email_invitado: str
-    rol_asignado: RolProyecto
-    token: str = field(default_factory=lambda: str(uuid.uuid4()))
-    fecha_invitacion: datetime = field(default_factory=datetime.now)
-    fecha_aceptacion: Optional[datetime] = None
-    estado: str = "pendiente"  # 'pendiente', 'aceptada', 'rechazada'
-    
-    def aceptar(self) -> None:
-        if self.estado != "pendiente":
-            raise ValueError("Invitación ya fue procesada")
-        self.estado = "aceptada"
-        self.fecha_aceptacion = datetime.now()
-    
-    def es_valida(self) -> bool:
-        return self.estado == "pendiente" and bool(self.token)
+    usuario_id: str
+    rol: RolProyecto
+    activo: bool = True
+    fecha_union: datetime = field(default_factory=datetime.now)
+
+    def puede_editar(self) -> bool:
+        return self.rol in RolProyecto.roles_edicion() and self.activo
+
+    def puede_ver(self) -> bool:
+        return self.activo
+
+    def puede_administrar(self) -> bool:
+        return self.rol == RolProyecto.PROPIETARIO and self.activo
