@@ -58,6 +58,7 @@ from pydantic import BaseModel
 from app.application.use_cases.diagram.generate_diagram import GenerarDiagramaDesdeCodigoUseCase
 from app.application.use_cases.diagram.create_diagram import CrearDiagramaUseCase
 from app.application.use_cases.diagram.edit_diagram import EditarDiagramaUseCase
+from app.application.use_cases.diagram.list_diagrams_by_project import ListDiagramsByProjectUseCase
 from app.domain.entities.diagram import Diagrama, TipoDiagrama
 from app.domain.repositories.diagram_repository import DiagramRepository
 from app.infrastructure.dependencies import get_diagram_repository
@@ -135,6 +136,11 @@ async def get_crear_diagrama_use_case(
 ) -> CrearDiagramaUseCase:
     return CrearDiagramaUseCase(diagram_repository)
 
+async def get_list_diagrams_by_project_use_case(
+    diagram_repository: DiagramRepository = Depends(get_diagram_repository)
+) -> ListDiagramsByProjectUseCase:
+    return ListDiagramsByProjectUseCase(diagram_repository)
+
 @router.post("/crear", summary="Crea un nuevo diagrama UML")
 async def crear_diagrama(
     request: CrearDiagramaRequest = Body(...),
@@ -179,6 +185,39 @@ async def obtener_todos_los_diagramas(
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener diagramas: {str(e)}")
+
+@router.get("/proyecto/{project_id}", summary="Obtiene todos los diagramas de un proyecto")
+async def obtener_diagramas_por_proyecto(
+    project_id: str,
+    list_diagrams_use_case: ListDiagramsByProjectUseCase = Depends(get_list_diagrams_by_project_use_case)
+):
+    """Endpoint para obtener todos los diagramas de un proyecto específico."""
+    try:
+        diagramas = await list_diagrams_use_case.ejecutar(project_id)
+        
+        return [
+            {
+                "id": str(diagrama.id),
+                "nombre": diagrama.nombre,
+                "proyecto_id": diagrama.proyecto_id,
+                "creado_por": diagrama.creado_por,
+                "tipo_diagrama": diagrama.tipo_diagrama.value,
+                "estado": diagrama.estado,
+                "contenido_plantuml": diagrama.contenido_plantuml,
+                "contenido_original": diagrama.contenido_original,
+                "lenguaje_original": diagrama.lenguaje_original,
+                "errores": diagrama.errores,
+                "version_actual": diagrama.version_actual,
+                "total_versiones": diagrama.total_versiones,
+                "fecha_creacion": diagrama.fecha_creacion,
+                "fecha_actualizacion": diagrama.fecha_actualizacion
+            }
+            for diagrama in diagramas
+        ]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener diagramas del proyecto: {str(e)}")
 
 @router.get("/{diagrama_id}", summary="Obtiene un diagrama por ID")
 async def obtener_diagrama_por_id(
