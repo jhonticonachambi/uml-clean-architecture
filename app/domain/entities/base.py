@@ -24,6 +24,11 @@ class RolProyecto(str, Enum):
     def roles_edicion(cls):
         """Devuelve los roles que pueden editar un proyecto"""
         return [cls.PROPIETARIO, cls.EDITOR]
+    
+    @classmethod
+    def puede_agregar_miembros(cls, rol):
+        """Verifica si un rol puede agregar miembros"""
+        return rol == cls.PROPIETARIO
 
 @dataclass
 class Entidad:

@@ -35,10 +35,8 @@ class AgregarMiembroUseCase:
         usuario = await self.usuario_repository.get_by_id(usuario_id)
         if not usuario:
             raise ValueError(f"El usuario con ID {usuario_id} no existe")
-            
-        # 3. Verificar que el solicitante tiene permisos
-        solicitante_miembro = next((m for m in proyecto.miembros if m.usuario_id == usuario_solicitante_id), None)
-        if not solicitante_miembro or solicitante_miembro.rol != RolProyecto.PROPIETARIO:
+              # 3. Verificar que el solicitante tiene permisos (debe ser propietario del proyecto)
+        if not proyecto.es_propietario(usuario_solicitante_id):
             raise PermissionError("Solo el propietario puede agregar miembros")
             
         # 4. Convertir el string de rol a enum
