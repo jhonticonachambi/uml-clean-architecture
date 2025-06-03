@@ -43,7 +43,6 @@ class ProyectoResponse(BaseModel):
     id: str
     nombre: str
     user_id: str
-    miembros: List[MiembroResponse] = []
     fecha_creacion: datetime
     fecha_actualizacion: datetime
     uuid_publico: str
@@ -201,14 +200,6 @@ async def obtener_proyecto_por_id(
             id=proyecto.id,
             nombre=proyecto.nombre,
             user_id=proyecto.user_id,
-            miembros=[
-                MiembroResponse(
-                    usuario_id=miembro.usuario_id,
-                    proyecto_id=miembro.proyecto_id,
-                    rol=miembro.rol.value,
-                    fecha_union=miembro.fecha_union
-                ) for miembro in proyecto.miembros
-            ],
             fecha_creacion=proyecto.fecha_creacion,
             fecha_actualizacion=proyecto.fecha_actualizacion,
             uuid_publico=proyecto.uuid_publico

@@ -28,7 +28,7 @@ class Proyecto:
     fecha_creacion: datetime = field(default_factory=datetime.now)
     fecha_actualizacion: datetime = field(default_factory=datetime.now)
     uuid_publico: str = field(default_factory=lambda: str(uuid.uuid4()))  # UUID como cadena
-    descripcion: str = ""  # Restaurar descripción
+    # descripcion: str = ""  # Restaurar descripción
 
     def __post_init__(self):
         self.validar()
