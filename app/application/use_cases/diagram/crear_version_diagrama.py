@@ -22,7 +22,8 @@ class CrearVersionDiagramaUseCase:
         contenido_original: str,
         creado_por: str,
         notas_version: str = "",
-        lenguaje_original: Optional[str] = None
+        lenguaje_original: Optional[str] = None,
+        contenido_plantuml: Optional[str] = None
     ) -> VersionDiagrama:
         """
         Crea una nueva versión de un diagrama existente.
@@ -33,13 +34,15 @@ class CrearVersionDiagramaUseCase:
             creado_por: ID del usuario que crea la versión
             notas_version: Descripción de los cambios
             lenguaje_original: Lenguaje del código fuente
+            contenido_plantuml: Contenido PlantUML opcional
             
         Returns:
             VersionDiagrama: La nueva versión creada
             
         Raises:
             ValueError: Si el diagrama no existe o los datos son inválidos
-        """        # 1. Verificar que el diagrama existe
+        """
+        # 1. Verificar que el diagrama existe
         diagrama = await self.diagram_repository.get_by_id(diagrama_id)
         if not diagrama:
             raise ValueError(f"No se encontró el diagrama con ID: {diagrama_id}")
@@ -54,7 +57,8 @@ class CrearVersionDiagramaUseCase:
             contenido_original=contenido_original,
             creado_por=creado_por,
             notas_version=notas_version,
-            lenguaje_original=lenguaje_original or diagrama.lenguaje_original
+            lenguaje_original=lenguaje_original or diagrama.lenguaje_original,
+            contenido_plantuml=contenido_plantuml
         )
         
         # 4. Guardar la nueva versión

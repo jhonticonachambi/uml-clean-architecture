@@ -14,6 +14,7 @@ class CrearVersionRequest(BaseModel):
     contenido_original: str
     notas_version: str = ""
     lenguaje_original: Optional[str] = None
+    contenido_plantuml: Optional[str] = None
     creado_por: str
 
 class VersionDiagramaResponse(BaseModel):
@@ -63,7 +64,8 @@ async def crear_nueva_version(
             contenido_original=request.contenido_original,
             creado_por=request.creado_por,
             notas_version=request.notas_version,
-            lenguaje_original=request.lenguaje_original
+            lenguaje_original=request.lenguaje_original,
+            contenido_plantuml=request.contenido_plantuml
         )
         
         return VersionDiagramaResponse(
