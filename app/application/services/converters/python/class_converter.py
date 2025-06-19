@@ -1,32 +1,3 @@
-# # app/application/services/converters/python/class_converter.py
-# class PythonClassConverter:
-#     def convert(self, code: str) -> str:
-#         plantuml = ["@startuml"]
-        
-#         if "class" in code:
-#             class_name = self._extract_python_class_name(code)
-#             plantuml.append(f"class {class_name} {{")
-            
-#             if "def __init__" in code:
-#                 plantuml.append("  +__init__()")
-#             if "def " in code:
-#                 plantuml.append("  +method1()")
-                
-#             plantuml.append("}")
-        
-#         plantuml.append("@enduml")
-#         return "\n".join(plantuml)
-    
-#     def _extract_python_class_name(self, code: str) -> str:
-#         for line in code.split('\n'):
-#             if line.strip().startswith("class "):
-#                 return line.split('class')[-1].split('(')[0].strip()
-#         return "PythonClass"
-
-
-
-
-
 # app/application/services/converters/python/class_converter.py
 
 import ast
