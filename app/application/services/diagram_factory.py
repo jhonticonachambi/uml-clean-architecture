@@ -30,6 +30,10 @@ from app.application.services.converters import (
     JavaScriptSequenceConverter,
     JavaScriptUseCaseConverter,
     JavaScriptActivityConverter,
+    
+    # Generic Converters (language-independent)
+    ComponentDiagramConverter,
+    PackageDiagramConverter,
 )
 
 class BaseConverter(Protocol):
@@ -91,6 +95,28 @@ class DiagramFactory:
             ('ts', 'usecase'): JavaScriptUseCaseConverter(),
             ('ts', 'use_case'): JavaScriptUseCaseConverter(),  # Alias
             ('ts', 'activity'): JavaScriptActivityConverter(),
+            
+            # Generic Converters (language-independent)
+            ('any', 'component'): ComponentDiagramConverter(),
+            ('any', 'package'): PackageDiagramConverter(),
+            
+            # Aliases for generic converters with all languages
+            ('csharp', 'component'): ComponentDiagramConverter(),
+            ('csharp', 'package'): PackageDiagramConverter(),
+            ('java', 'component'): ComponentDiagramConverter(),
+            ('java', 'package'): PackageDiagramConverter(),
+            ('python', 'component'): ComponentDiagramConverter(),
+            ('python', 'package'): PackageDiagramConverter(),
+            ('php', 'component'): ComponentDiagramConverter(),
+            ('php', 'package'): PackageDiagramConverter(),
+            ('javascript', 'component'): ComponentDiagramConverter(),
+            ('javascript', 'package'): PackageDiagramConverter(),
+            ('typescript', 'component'): ComponentDiagramConverter(),
+            ('typescript', 'package'): PackageDiagramConverter(),
+            ('js', 'component'): ComponentDiagramConverter(),
+            ('js', 'package'): PackageDiagramConverter(),
+            ('ts', 'component'): ComponentDiagramConverter(),
+            ('ts', 'package'): PackageDiagramConverter(),
         }
         
         # Normalizar lenguaje a minúsculas

@@ -22,3 +22,7 @@ from .javascript.class_converter import JavaScriptClassConverter
 from .javascript.sequence_converter import JavaScriptSequenceConverter
 from .javascript.usecase_converter import JavaScriptUseCaseConverter
 from .javascript.activity_converter import JavaScriptActivityConverter
+
+# Generic converters (language-independent)
+from .component_diagram_converter import ComponentDiagramConverter
+from .package_diagram_converter import PackageDiagramConverter
