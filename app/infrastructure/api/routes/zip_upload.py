@@ -435,15 +435,18 @@ async def upload_zip_project(file: UploadFile = File(...)):
         logger.error(f"Error al subir proyecto ZIP: {e}")
         raise HTTPException(status_code=500, detail=f"Fallo al procesar archivo ZIP: {str(e)}")
 
+class ZipAnalysisRequest(BaseModel):
+    project_id: str
+
 @router.post("/analyze-zip", response_model=ProjectAnalysisResponse)
-async def analyze_zip_project_endpoint(project_id: str):
+async def analyze_zip_project_endpoint(request: ZipAnalysisRequest):
     """
     📊 Analiza un proyecto extraído de ZIP
     """
-    if project_id not in uploaded_projects:
+    if request.project_id not in uploaded_projects:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
 
-    temp_path = uploaded_projects[project_id]["temp_path"]
+    temp_path = uploaded_projects[request.project_id]["temp_path"]
 
     try:
         return analyze_zip_project(temp_path)
