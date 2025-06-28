@@ -444,105 +444,35 @@ class PackageDiagramConverter:
     def _generate_plantuml(self) -> str:
         """Genera el código PlantUML para el diagrama de paquetes"""
         plantuml = ["@startuml"]
-        
-        # Configuración de estilo
-        plantuml.extend([
-            "!theme plain",
-            "skinparam package {",
-            "  BackgroundColor White",
-            "  BorderColor Black",
-            "  FontSize 12",
-            "}",
-            "skinparam arrow {",
-            "  Color #444444",
-            "}",
-            ""
-        ])
-        
-        # Agrupar paquetes por tipo
-        packages_by_type = defaultdict(list)
+
+        # Generar paquetes agrupados por tipo (sin temas ni colores)
         for pkg_name, pkg_info in self.packages.items():
-            pkg_type = pkg_info.get('type', 'module')
-            packages_by_type[pkg_type].append((pkg_name, pkg_info))
-        
-        # Generar paquetes agrupados por tipo
-        type_colors = {
-            'presentation': '#E8F4FD',
-            'business': '#FFF2CC',
-            'domain': '#D4E6B7',
-            'data': '#F8CECC',
-            'configuration': '#E1D5E7',
-            'utility': '#DAE8FC',
-            'testing': '#FFE6CC',
-            'external': '#F5F5F5',
-            'module': '#FFFFFF'
-        }
-        
-        for pkg_type, packages in packages_by_type.items():
-            if not packages:
-                continue
-                
-            color = type_colors.get(pkg_type, '#FFFFFF')
-            
-            # Si hay muchos paquetes del mismo tipo, agruparlos
-            if len(packages) > 1 and pkg_type != 'external':
-                plantuml.append(f'package "{pkg_type.title()} Layer" #{color} {{')
-                
-                for pkg_name, pkg_info in packages:
-                    short_name = pkg_info.get('short_name', pkg_name)
-                    plantuml.append(f'  package "{short_name}"')
-                
-                plantuml.append('}')
-            else:
-                # Paquetes individuales
-                for pkg_name, pkg_info in packages:
-                    short_name = pkg_info.get('short_name', pkg_name)
-                    if pkg_type == 'external':
-                        plantuml.append(f'package "{short_name}" #{color} <<external>>')
-                    else:
-                        plantuml.append(f'package "{short_name}" #{color}')
-            
-            plantuml.append('')
-        
+            short_name = pkg_info.get('short_name', pkg_name)
+            plantuml.append(f'package "{short_name}"')
+
         # Generar dependencias
         generated_deps = set()  # Evitar duplicados
-        
+
         for dependency in self.dependencies:
             from_pkg = dependency['from']
             to_pkg = dependency['to']
-            
+
             # Obtener nombres cortos
             from_short = self.packages.get(from_pkg, {}).get('short_name', from_pkg)
             to_short = self.packages.get(to_pkg, {}).get('short_name', to_pkg)
-            
+
             # Evitar duplicados
             dep_key = (from_short, to_short)
             if dep_key in generated_deps:
                 continue
             generated_deps.add(dep_key)
-            
+
             # Tipo de flecha según el tipo de dependencia
             arrow = '-->'
             if to_pkg.startswith('external.'):
                 arrow = '..>'
-            
+
             plantuml.append(f'"{from_short}" {arrow} "{to_short}"')
-        
-        # Agregar algunas dependencias típicas si no se detectaron
-        if not self.dependencies and len(self.packages) > 1:
-            pkg_names = list(self.packages.keys())
-            # Crear algunas dependencias lógicas
-            for i, pkg_name in enumerate(pkg_names[:3]):
-                for j, other_pkg in enumerate(pkg_names[i+1:i+3]):
-                    if pkg_name != other_pkg:
-                        pkg_short = self.packages[pkg_name].get('short_name', pkg_name)
-                        other_short = self.packages[other_pkg].get('short_name', other_pkg)
-                        plantuml.append(f'"{pkg_short}" --> "{other_short}"')
-        
-        # Agregar notas explicativas
-        if packages_by_type.get('external'):
-            plantuml.append('')
-            plantuml.append('note right : External dependencies\\nfrom package managers')
-        
+
         plantuml.append("@enduml")
         return '\n'.join(plantuml)
