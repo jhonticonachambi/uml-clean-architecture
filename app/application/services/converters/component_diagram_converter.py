@@ -26,6 +26,7 @@ class ComponentDiagramConverter:
         # Detectar tipo de entrada
         if self._is_directory_structure(code):
             self._analyze_directory_structure(code)
+            return self._generate_plantuml_tree()
         elif self._is_project_config(code):
             self._analyze_project_config(code)
         else:
@@ -51,11 +52,14 @@ class ComponentDiagramConverter:
     def _analyze_directory_structure(self, structure: str):
         """Analiza estructura de directorios para extraer componentes"""
         lines = structure.strip().split('\n')
-        current_package = ""
         
         for line in lines:
             line = line.strip()
             if not line:
+                continue
+            
+            # Filtrar líneas que no son rutas de archivos válidas
+            if self._is_file_content_line(line):
                 continue
                 
             # Extraer información del path
@@ -63,17 +67,18 @@ class ComponentDiagramConverter:
             if path_info:
                 component_name, package_name, component_type = path_info
                 
-                # Agregar componente
-                self.components.append({
-                    'name': component_name,
-                    'package': package_name,
-                    'type': component_type,
-                    'path': line
-                })
-                
-                # Agregar paquete
-                if package_name:
-                    self.packages.add(package_name)
+                # Solo agregar archivos relevantes (no configuración de VS)
+                if self._is_relevant_file(component_name, line):
+                    self.components.append({
+                        'name': component_name,
+                        'package': package_name,
+                        'type': component_type,
+                        'path': line
+                    })
+                    
+                    # Agregar paquete
+                    if package_name:
+                        self.packages.add(package_name)
     
     def _analyze_project_config(self, config: str):
         """Analiza configuración de proyecto para extraer dependencias"""
@@ -352,87 +357,179 @@ class ComponentDiagramConverter:
                        and ('==' in line or '>=' in line or line.replace('-', '').replace('_', '').isalnum()))
         return dep_lines > len(lines) * 0.7
     
-    def _generate_plantuml(self) -> str:
+    def _generate_plantuml(self, exclude_keywords: List[str] = None) -> str:
         """Genera el código PlantUML para el diagrama de componentes"""
+        # Lista de palabras clave para excluir (por defecto)
+        default_exclude_keywords = [
+            'PropertyGroup', 'ItemGroup', 'Reference', 'HintPath', 'Configuration',
+            'DefineConstants', 'ErrorReport', 'WarningLevel', 'DebugType', 'Optimize',
+            'VisualStudio', 'ProjectExtensions', 'Target', 'SchemaVersion', 'Content',
+            'Microsoft', 'System', 'NuGetPackageImportStamp', 'Compile', 'None',
+            'DependentUpon', 'Folder', 'Import', 'UseIIS', 'AutoAssignPort', 'DevelopmentServerPort',
+            'DevelopmentServerVPath', 'IISUrl', 'NTLMAuthentication', 'UseCustomServer',
+            'SaveServerSettingsInUserFile', 'ErrorText', 'Error', 'ProjectGuid', 'ProjectTypeGuids',
+            'OutputType', 'AppDesignerFolder', 'RootNamespace', 'AssemblyName', 'UseIISExpress',
+            'Use64BitIISExpress', 'IISExpressSSLPort', 'IISExpressAnonymousAuthentication',
+            'IISExpressWindowsAuthentication', 'IISExpressUseClassicPipelineMode',
+            'UseGlobalApplicationHostFile', 'DebugSymbols', 'OutputPath', 'Reference', 'Content'
+        ]
+
+        # Usar palabras clave personalizadas si se proporcionan
+        exclude_keywords = exclude_keywords or default_exclude_keywords
+
+        def should_exclude(name):
+            return any(keyword in name for keyword in exclude_keywords)
+
         plantuml = ["@startuml"]
-        
-        # Configuración de estilo
-        plantuml.extend([
-            "!theme plain",
-            "skinparam component {",
-            "  BackgroundColor White",
-            "  BorderColor Black",
-            "  ArrowColor #444444",
-            "}",
-            "skinparam package {",
-            "  BackgroundColor #F0F0F0",
-            "  BorderColor #888888",
-            "}",
-            ""
-        ])
-        
+
         # Generar paquetes
         package_components = {}
         for component in self.components:
-            pkg = component.get('package', 'default')
+            comp_name = component['name']
+            if should_exclude(comp_name):
+                continue
+
+            pkg = component.get('package', 'default').replace('.', '_')
             if pkg not in package_components:
                 package_components[pkg] = []
             package_components[pkg].append(component)
-        
+
         # Generar componentes agrupados por paquete
         for package_name, components in package_components.items():
-            if package_name and package_name != 'default':
-                plantuml.append(f'package "{package_name}" {{')
-                
+            plantuml.append(f'package "{package_name}" {{')
+
             for component in components:
-                comp_name = component['name']
-                comp_type = component.get('type', 'component')
-                
-                # Iconos según el tipo
-                icon = self._get_component_icon(comp_type)
-                plantuml.append(f'  [{comp_name}] as {comp_name} {icon}')
-            
-            if package_name and package_name != 'default':
-                plantuml.append('}')
-                plantuml.append('')
-        
-        # Generar interfaces
-        for interface in self.interfaces:
-            interface_name = interface['name']
-            plantuml.append(f'interface {interface_name}')
-            
-            # Agregar métodos si los hay
-            methods = interface.get('methods', [])
-            if methods:
-                plantuml.append(f'{interface_name} : {methods[0]}()')
-                for method in methods[1:3]:  # Limitar a 3 métodos para claridad
-                    plantuml.append(f'{interface_name} : {method}()')
-                if len(methods) > 3:
-                    plantuml.append(f'{interface_name} : ...')
-        
-        if self.interfaces:
-            plantuml.append('')
-        
-        # Generar dependencias
+                comp_name = component['name'].replace('.', '_')
+                if should_exclude(comp_name):
+                    continue
+                plantuml.append(f'  component "{comp_name}"')
+
+            plantuml.append('}')
+
+        # Generar relaciones explícitas
         for dependency in self.dependencies:
-            from_comp = dependency['from']
-            to_comp = dependency['to']
+            from_comp = dependency['from'].replace('.', '_')
+            to_comp = dependency['to'].replace('.', '_')
+            if should_exclude(from_comp) or should_exclude(to_comp):
+                continue
+
             dep_type = dependency.get('type', 'uses')
-            
             arrow = '-->' if dep_type == 'uses' else '..>'
             plantuml.append(f'{from_comp} {arrow} {to_comp}')
-        
-        # Generar relaciones automáticas entre componentes del mismo paquete
-        for package_name, components in package_components.items():
-            if len(components) > 1:
-                # Conectar componentes relacionados (heurística simple)
-                for i, comp1 in enumerate(components):
-                    for comp2 in components[i+1:]:
-                        if self._are_related(comp1, comp2):
-                            plantuml.append(f"{comp1['name']} --> {comp2['name']}")
-        
+
         plantuml.append("@enduml")
         return '\n'.join(plantuml)
+    
+    def _generate_plantuml_tree(self, exclude_keywords: List[str] = None) -> str:
+        """Genera un diagrama PlantUML simplificado en forma de árbol"""
+        # Lista de palabras clave para excluir (por defecto)
+        default_exclude_keywords = [
+            'PropertyGroup', 'ItemGroup', 'Reference', 'HintPath', 'Configuration',
+            'DefineConstants', 'ErrorReport', 'WarningLevel', 'DebugType', 'Optimize',
+            'VisualStudio', 'ProjectExtensions', 'Target', 'SchemaVersion', 'Content',
+            'Microsoft', 'System', 'NuGetPackageImportStamp', 'Compile', 'None',
+            'DependentUpon', 'Folder', 'Import', 'UseIIS', 'AutoAssignPort', 'DevelopmentServerPort',
+            'DevelopmentServerVPath', 'IISUrl', 'NTLMAuthentication', 'UseCustomServer',
+            'SaveServerSettingsInUserFile', 'ErrorText', 'Error', 'ProjectGuid', 'ProjectTypeGuids',
+            'OutputType', 'AppDesignerFolder', 'RootNamespace', 'AssemblyName', 'UseIISExpress',
+            'Use64BitIISExpress', 'IISExpressSSLPort', 'IISExpressAnonymousAuthentication',
+            'IISExpressWindowsAuthentication', 'IISExpressUseClassicPipelineMode',
+            'UseGlobalApplicationHostFile', 'DebugSymbols', 'OutputPath', 'Reference', 'Content',
+            '<', '>', 'Project', 'Solution', 'Global', 'Section'
+        ]
+
+        # Usar palabras clave personalizadas si se proporcionan
+        exclude_keywords = exclude_keywords or default_exclude_keywords
+
+        def should_exclude(name):
+            return any(keyword in name for keyword in exclude_keywords)
+
+        plantuml = ["@startuml"]
+
+        # Organizar componentes por jerarquía
+        hierarchy = {}
+        
+        for component in self.components:
+            comp_name = component['name']
+            if should_exclude(comp_name):
+                continue
+            
+            package_path = component.get('package', 'root')
+            
+            # Agregar a jerarquía
+            if package_path not in hierarchy:
+                hierarchy[package_path] = []
+            hierarchy[package_path].append(comp_name)
+
+        # Generar estructura jerárquica usando folder y componentes
+        self._generate_folder_structure(plantuml, hierarchy)
+
+        plantuml.append("@enduml")
+        return '\n'.join(plantuml)
+    
+    def _generate_folder_structure(self, plantuml: List[str], hierarchy: Dict):
+        """Genera la estructura de folders usando sintaxis correcta de PlantUML"""
+        # Procesar cada paquete
+        for package_path, components in hierarchy.items():
+            if package_path == 'root':
+                # Elementos en la raíz
+                for comp_name in components:
+                    if self._is_file_component(comp_name):
+                        plantuml.append(f'[{comp_name}]')
+                    else:
+                        plantuml.append(f'folder "{comp_name}"')
+            else:
+                # Crear estructura anidada
+                path_parts = package_path.split('.')
+                self._create_nested_folder(plantuml, path_parts, components)
+    
+    def _create_nested_folder(self, plantuml: List[str], path_parts: List[str], components: List[str]):
+        """Crea una estructura de folder anidada"""
+        if len(path_parts) == 1:
+            # Un solo nivel
+            folder_name = path_parts[0]
+            plantuml.append(f'folder "{folder_name}" {{')
+            for comp_name in components:
+                if self._is_file_component(comp_name):
+                    plantuml.append(f'  [{comp_name}]')
+                else:
+                    plantuml.append(f'  folder "{comp_name}"')
+            plantuml.append('}')
+        elif len(path_parts) == 2:
+            # Dos niveles
+            parent_folder = path_parts[0]
+            child_folder = path_parts[1]
+            plantuml.append(f'folder "{parent_folder}" {{')
+            plantuml.append(f'  folder "{child_folder}" {{')
+            for comp_name in components:
+                if self._is_file_component(comp_name):
+                    plantuml.append(f'    [{comp_name}]')
+                else:
+                    plantuml.append(f'    folder "{comp_name}"')
+            plantuml.append('  }')
+            plantuml.append('}')
+        else:
+            # Más de dos niveles - simplificar
+            root_folder = path_parts[0]
+            nested_path = '.'.join(path_parts[1:])
+            plantuml.append(f'folder "{root_folder}" {{')
+            plantuml.append(f'  folder "{nested_path}" {{')
+            for comp_name in components:
+                if self._is_file_component(comp_name):
+                    plantuml.append(f'    [{comp_name}]')
+                else:
+                    plantuml.append(f'    folder "{comp_name}"')
+            plantuml.append('  }')
+            plantuml.append('}')
+    
+    def _is_file_component(self, name: str) -> bool:
+        """Determina si un componente es un archivo o directorio"""
+        # Extensiones de archivos conocidas
+        file_extensions = ['.cs', '.js', '.ts', '.py', '.java', '.php', '.html', '.css', 
+                          '.jsx', '.tsx', '.vue', '.go', '.rs', '.cpp', '.c', '.h',
+                          '.cshtml', '.aspx', '.asax', '.config']
+        
+        return any(name.lower().endswith(ext) for ext in file_extensions)
     
     def _get_component_icon(self, component_type: str) -> str:
         """Retorna el icono apropiado para el tipo de componente"""
@@ -472,3 +569,70 @@ class ComponentDiagramConverter:
         comp2_type = comp2.get('type', '')
         
         return (comp1_type, comp2_type) in relations or (comp2_type, comp1_type) in relations
+    
+    def _is_file_content_line(self, line: str) -> bool:
+        """Detecta si una línea es contenido de archivo en lugar de un path"""
+        # Líneas que contienen contenido de archivos de configuración
+        content_indicators = [
+            '<?xml', '<Project', '<PropertyGroup', '<ItemGroup', '<Reference',
+            '<Compile', '<Content', '<None', '<Folder', '<Import', '<Target',
+            'Global', 'EndGlobal', 'Solution', 'Project(', 'EndProject',
+            'GlobalSection', 'EndGlobalSection', '<!--', '-->', '{', '}',
+            'Debug|Any CPU', 'Release|Any CPU', 'Build|', 'ActiveCfg',
+            '---CONFIG', '#', 'Visual Studio', 'Version', '﻿', 'Microsoft',
+            'El número de serie', 'Listado de rutas', 'PS C:', '└───', '├───',
+            '│', '    ', '\t'
+        ]
+        
+        # También filtrar líneas muy cortas o que solo contienen espacios/símbolos
+        line_stripped = line.strip()
+        if len(line_stripped) <= 2:
+            return True
+            
+        # Filtrar líneas que son solo símbolos de tree
+        if all(c in '│├└─   \t' for c in line_stripped):
+            return True
+            
+        return any(indicator in line for indicator in content_indicators)
+    
+    def _is_relevant_file(self, filename: str, full_path: str) -> bool:
+        """Determina si un archivo es relevante para el diagrama"""
+        # Extensiones de archivos relevantes
+        relevant_extensions = [
+            '.cs', '.js', '.ts', '.py', '.java', '.php', '.html', '.css',
+            '.jsx', '.tsx', '.vue', '.go', '.rs', '.cpp', '.c', '.h',
+            '.cshtml', '.aspx'
+        ]
+        
+        # Archivos de configuración irrelevantes
+        irrelevant_files = [
+            '.gitattributes', '.gitignore', 'web.config', 'packages.config',
+            '.sln', '.csproj', '.vbproj', '.fsproj', '---CONFIG', 'CONFIG'
+        ]
+        
+        # Filtrar nombres que contienen caracteres especiales no válidos
+        if any(char in filename for char in ['﻿', '#', '<', '>', '|']):
+            return False
+            
+        # Filtrar líneas que son comentarios o metadata
+        if filename.startswith('#') or filename.startswith('---'):
+            return False
+            
+        # Verificar extensión
+        _, ext = os.path.splitext(filename)
+        if ext.lower() in relevant_extensions:
+            return True
+            
+        # Excluir archivos irrelevantes
+        if any(irr in filename.lower() for irr in irrelevant_files):
+            return False
+            
+        # Si es un directorio (no tiene extensión), incluirlo solo si es un nombre válido
+        if not ext and '.' not in filename and filename.isalnum():
+            return True
+            
+        # Incluir directorios con nombres válidos (letras, números, guiones bajos)
+        if not ext and all(c.isalnum() or c in '_-' for c in filename):
+            return True
+            
+        return False

@@ -157,57 +157,95 @@ def analyze_repository(temp_path: str) -> RepoAnalysisResponse:
     )
 
 def generate_directory_structure(base_path: str, max_depth: int = None) -> str:
-    """Genera una representación de la estructura de directorios"""
+    """Genera una representación optimizada de la estructura de directorios"""
     structure_lines = []
     ignore_patterns = parse_gitignore(base_path)
     
-    for root, dirs, files in os.walk(base_path):
-        # Calcular profundidad actual
-        level = root.replace(base_path, '').count(os.sep)
-        if max_depth and level > max_depth:
-            continue
-            
-        rel_path = os.path.relpath(root, base_path)
-        if rel_path == '.':
-            rel_path = ''
-            
-        # Filtrar directorios ignorados
-        if rel_path and is_ignored(rel_path, ignore_patterns):
-            continue
-            
-        # Agregar directorio actual
-        if rel_path:
-            structure_lines.append(f"{rel_path}/")
-            
-        # Agregar archivos relevantes
-        for file in files:
-            file_path = os.path.join(rel_path, file) if rel_path else file
-            if is_ignored(file_path, ignore_patterns):
+    # Optimización: usar max_depth por defecto si no se especifica
+    if max_depth is None:
+        max_depth = 4  # Limitar a 4 niveles por defecto para mejorar rendimiento
+    
+    # Contador para limitar archivos procesados (optimización de rendimiento)
+    max_files = 500  # Máximo 500 archivos para evitar timeouts
+    files_processed = 0
+    
+    try:
+        for root, dirs, files in os.walk(base_path):
+            # Verificar límite de archivos procesados
+            if files_processed >= max_files:
+                break
+                
+            # Calcular profundidad actual
+            level = root.replace(base_path, '').count(os.sep)
+            if level > max_depth:
+                # Podar directorios que exceden la profundidad máxima
+                dirs[:] = []
                 continue
                 
-            # Solo incluir archivos de código y configuración
-            if file.endswith(('.py', '.js', '.ts', '.java', '.cs', '.php', '.go', '.rs', '.cpp', '.h',
-                           '.json', '.xml', '.yml', '.yaml', '.toml', '.cfg', '.ini')):
-                structure_lines.append(file_path)
+            rel_path = os.path.relpath(root, base_path)
+            if rel_path == '.':
+                rel_path = ''
+                
+            # Filtrar directorios ignorados y comunes que no aportan valor
+            if rel_path and (is_ignored(rel_path, ignore_patterns) or 
+                           any(skip_dir in rel_path.lower() for skip_dir in 
+                               ['node_modules', '.git', '__pycache__', 'bin', 'obj', 'dist', 'build'])):
+                dirs[:] = []  # No procesar subdirectorios
+                continue
+                
+            # Agregar directorio actual (solo si es relevante)
+            if rel_path and not any(skip_dir in rel_path.lower() for skip_dir in ['test', 'tests', 'spec']):
+                structure_lines.append(f"{rel_path}/")
+                
+            # Filtrar y agregar solo archivos relevantes
+            relevant_files = []
+            for file in files:
+                if files_processed >= max_files:
+                    break
+                    
+                file_path = os.path.join(rel_path, file) if rel_path else file
+                if is_ignored(file_path, ignore_patterns):
+                    continue
+                    
+                # Solo incluir archivos de código fuente principales
+                if file.endswith(('.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.cs', '.php', '.go', '.rs', '.cpp', '.h')):
+                    relevant_files.append(file_path)
+                    files_processed += 1
+                    
+            structure_lines.extend(relevant_files)
+            
+    except Exception as e:
+        logger.warning(f"Error durante la generación de estructura: {e}")
+        # Continuar con lo que se ha procesado hasta ahora
     
     return '\n'.join(structure_lines)
 
 def analyze_project_dependencies(base_path: str) -> str:
-    """Analiza dependencias del proyecto buscando archivos de configuración"""
+    """Analiza dependencias del proyecto de forma optimizada"""
     config_content = []
     
-    # Archivos de configuración común
+    # Archivos de configuración común (limitados para mejor rendimiento)
     config_files = [
-        'package.json', 'requirements.txt', 'pom.xml', 'build.gradle', 
-        'composer.json', 'Cargo.toml', 'go.mod', 'setup.py', 'pyproject.toml'
+        'package.json', 'requirements.txt', 'pom.xml', 'Cargo.toml', 'go.mod'
     ]
+    
+    # Límite de tamaño de archivo para evitar leer archivos gigantes
+    max_file_size = 50 * 1024  # 50KB máximo
     
     for config_file in config_files:
         config_path = os.path.join(base_path, config_file)
         if os.path.exists(config_path):
             try:
+                # Verificar tamaño del archivo
+                if os.path.getsize(config_path) > max_file_size:
+                    config_content.append(f"---CONFIG-{config_file}--- (archivo muy grande, omitido)")
+                    continue
+                    
                 with open(config_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
+                    # Limitar contenido si es muy largo
+                    if len(content) > 2000:
+                        content = content[:2000] + "...(truncado)"
                     config_content.append(f"---CONFIG-{config_file}---")
                     config_content.append(content)
             except Exception as e:
@@ -436,7 +474,7 @@ async def generate_diagram(request: DiagramRequest):
 @router.post("/generate-component-diagram", response_model=DiagramResponse)
 async def generate_component_diagram(request: ComponentDiagramRequest):
     """
-    Genera un diagrama UML de componentes basado en la estructura del repositorio.
+    Genera un diagrama UML de componentes optimizado basado en la estructura del repositorio.
     Analiza la arquitectura del proyecto, componentes, interfaces y dependencias.
     """
     if request.repo_id not in cloned_repositories:
@@ -446,25 +484,45 @@ async def generate_component_diagram(request: ComponentDiagramRequest):
     base_path = repo_info["temp_path"]
     
     try:
-        # Generar estructura de directorios
-        directory_structure = generate_directory_structure(base_path, request.max_depth)
+        logger.info(f"Generando diagrama de componentes para repo: {request.repo_id}")
         
-        # Analizar dependencias del proyecto si se solicita
+        # Aplicar límites por defecto más conservadores para mejor rendimiento
+        max_depth = min(request.max_depth or 3, 4)  # Máximo 4 niveles
+        
+        # Generar estructura de directorios (optimizada)
+        directory_structure = generate_directory_structure(base_path, max_depth)
+        
+        # Limitar el análisis de dependencias solo si es realmente necesario
         project_deps = ""
         if request.include_external_deps:
-            project_deps = analyze_project_dependencies(base_path)
+            try:
+                project_deps = analyze_project_dependencies(base_path)
+            except Exception as e:
+                logger.warning(f"Error al analizar dependencias, continuando sin ellas: {e}")
+                project_deps = ""
         
-        # Combinar información para el análisis
+        # Combinar información para el análisis (con límite de tamaño)
         analysis_input = directory_structure
         if project_deps:
+            # Limitar el tamaño total del input
+            total_length = len(analysis_input) + len(project_deps)
+            if total_length > 50000:  # 50KB máximo
+                project_deps = project_deps[:25000] + "...(truncado para mejor rendimiento)"
             analysis_input += f"\n\n{project_deps}"
+        
+        # Verificar que tenemos datos para procesar
+        if not analysis_input.strip():
+            raise HTTPException(status_code=400, detail="No se encontraron archivos relevantes en el repositorio")
         
         # Crear converter genérico para componentes
         converter = DiagramFactory.create_converter('any', 'component')
         diagram = converter.convert(analysis_input)
         
+        logger.info(f"Diagrama de componentes generado exitosamente para repo: {request.repo_id}")
         return DiagramResponse(diagram=diagram)
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error al generar diagrama de componentes: {e}")
         raise HTTPException(status_code=500, detail=f"Fallo al generar diagrama de componentes: {str(e)}")
